@@ -8,6 +8,8 @@ public class ClientHandler extends Thread {
     private DataInputStream input;
     private DataOutputStream output;
     private Server server;
+    private String role; // Player or Spectator
+    private Room room; // The room the client is part of
 
     public ClientHandler(Socket socket, Server server) {
         this.clientSocket = socket;
@@ -27,15 +29,15 @@ public class ClientHandler extends Thread {
             // Handle communication with the client here
             // You can send and receive messages using input and output streams
 
-            // Example: Receive the role information from the client
-            String role = input.readUTF();
+            // Receive the role information from the client
+            this.role = input.readUTF();
             System.out.println("Client role: " + role);
 
-            // Implement game logic here based on the client's role
+            // Handle joining the room based on the client's role
             if ("player".equals(role)) {
-                handlePlayerLogic();
+                joinPlayerRoom();
             } else if ("spectator".equals(role)) {
-                handleSpectatorLogic();
+                joinSpectatorRoom();
             }
 
             // Notify successful entrance to the match room
@@ -46,10 +48,10 @@ public class ClientHandler extends Thread {
                 String message = input.readUTF();
                 System.out.println("Received message from client: " + message);
 
-                // Handle the received message, e.g., check for end of game signal
+                // Handle the received message, e.g., check for the end of the game signal
                 if ("end_game".equals(message)) {
                     // Perform actions for ending the game
-                    break;  // exit the loop if the game has ended
+                    break; // Exit the loop if the game has ended
                 }
 
                 // You can add more logic to handle other messages from the client
@@ -60,7 +62,9 @@ public class ClientHandler extends Thread {
         } finally {
             try {
                 // Close the resources when needed
-                server.removeClient(this);
+                if (room != null) {
+                    room.removeClient(this);
+                }
                 clientSocket.close();
                 System.out.println("Client disconnected: " + clientSocket.getInetAddress());
             } catch (IOException e) {
@@ -69,14 +73,34 @@ public class ClientHandler extends Thread {
         }
     }
 
-    private void handlePlayerLogic() {
-        // Implement logic for players
-        System.out.println("Player Logic");
+    private void joinPlayerRoom() {
+        Room playerRoom = server.findOrCreatePlayerRoom(this);
+        if (playerRoom != null) {
+            this.room = playerRoom;
+            playerRoom.addPlayer(this);
+            System.out.println("Player joined room: " + playerRoom.getRoomId());
+        } else {
+            System.out.println("No available rooms. Cannot join.");
+        }
+    }
+    
+
+    private void joinSpectatorRoom() {
+        // Try to join an existing room or create a new one
+        Room spectatorRoom = server.findOrCreateSpectatorRoom(this);
+        if (spectatorRoom != null) {
+            this.room = spectatorRoom;
+            spectatorRoom.addSpectator(this);
+            System.out.println("Spectator joined room: " + spectatorRoom.getRoomId());
+        } else {
+            // Handle the case when there are no available rooms
+            System.out.println("No available rooms. Cannot join.");
+        }
     }
 
-    private void handleSpectatorLogic() {
-        // Implement logic for spectators
-        System.out.println("Spectator Logic");
+    // Add the setRoom method
+    public void setRoom(Room room) {
+        this.room = room;
     }
 
     private void notifySuccess() {
@@ -95,5 +119,13 @@ public class ClientHandler extends Thread {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    // Getter for the client's role
+    public String getRole() {
+        return role;
+    }
+    public Room getRoom() {
+        return room;
     }
 }

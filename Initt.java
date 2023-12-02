@@ -1,6 +1,7 @@
 import java.awt.*;
 import java.awt.event.*;
 import javax.swing.*;
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -11,12 +12,13 @@ public class Initt implements ActionListener {
     JFrame frame;
     JPanel background;
     JPanel waitingPanel;
-    JPanel waitingRoomPanel; // New waiting room panel
+    JPanel waitingRoomPanel;
     JButton play;
     JButton spectate;
     JLabel seconds_left;
     int seconds = 10;
     Timer timer;
+    private JButton clickedButton;
 
     public Initt() {
         frame = new JFrame();
@@ -24,48 +26,37 @@ public class Initt implements ActionListener {
         frame.setSize(1000, 650);
         frame.setResizable(false);
 
-        // Background panel
         background = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                ImageIcon image = new ImageIcon("/home/rocceli/Pictures/Pins/856b8641a212ebed27c55a48c0f28168.jpg"); // Replace
-                                                                                                                     // with
-                                                                                                                     // your
-                                                                                                                     // image
-                                                                                                                     // path
+                ImageIcon image = new ImageIcon("/home/rocceli/Pictures/Pins/856b8641a212ebed27c55a48c0f28168.jpg");
                 Image img = image.getImage();
                 g.drawImage(img, 0, 0, this.getWidth(), this.getHeight(), this);
             }
         };
         background.setLayout(null);
 
-        // Initialize waiting panels
         createWaitingPanel();
-        createWaitingRoomPanel(); // New waiting room panel
+        createWaitingRoomPanel();
 
-        // Heading label
         JLabel heading = new JLabel("Stumble Game");
         heading.setFont(new Font("MV Boli", Font.BOLD, 40));
         heading.setForeground(Color.GREEN);
         heading.setBounds(330, 50, 500, 50);
 
-        // Set the 'Play' button at the center
         play = new JButton("Play");
         configureButton(play, 425, 275);
 
-        // Set the 'Spectate' button at the center
         spectate = new JButton("Spectate");
         configureButton(spectate, frame.getWidth() - 170, frame.getHeight() - 115);
 
-        // Add components to the background panel
         background.add(heading);
         background.add(play);
         background.add(spectate);
         background.add(waitingPanel);
-        background.add(waitingRoomPanel); // Add new waiting room panel
+        background.add(waitingRoomPanel);
 
-        // Add the background panel to the frame
         frame.add(background);
         frame.setVisible(true);
     }
@@ -85,7 +76,6 @@ public class Initt implements ActionListener {
         waitingPanel.setLayout(null);
         waitingPanel.setOpaque(false);
 
-        // Seconds Left label
         seconds_left = new JLabel();
         seconds_left.setBounds(535, 510, 100, 100);
         seconds_left.setBackground(new Color(25, 25, 25));
@@ -96,7 +86,6 @@ public class Initt implements ActionListener {
         seconds_left.setHorizontalAlignment(JTextField.CENTER);
         seconds_left.setVisible(false);
 
-        // Add components to the waiting panel
         waitingPanel.add(seconds_left);
     }
 
@@ -106,7 +95,6 @@ public class Initt implements ActionListener {
         waitingRoomPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 10, 10));
         waitingRoomPanel.setOpaque(false);
 
-        // JLabel to indicate waiting for room
         JLabel waitingLabel = new JLabel("Waiting for room...");
         waitingLabel.setFont(new Font("MV Boli", Font.BOLD, 30));
         waitingRoomPanel.add(waitingLabel);
@@ -116,34 +104,32 @@ public class Initt implements ActionListener {
     @Override
     public void actionPerformed(ActionEvent e) {
         if (timer != null) {
-            timer.stop(); // Stop the existing timer if it exists
+            timer.stop();
         }
-        seconds = 10; // Reset seconds to 10
+        seconds = 10;
         timer = new Timer(1000, ae -> {
             seconds--;
             handleTimerTick();
         });
-        timer.start(); // Start the new timer
+        timer.start();
 
-        if (e.getSource() == play || e.getSource() == spectate) {
+        clickedButton = (JButton) e.getSource();
+
+        if (clickedButton == play || clickedButton == spectate) {
             play.setEnabled(false);
             spectate.setEnabled(false);
             waitingPanel.setVisible(false);
-            waitingRoomPanel.setVisible(true); // Show the new waiting room panel
+            waitingRoomPanel.setVisible(true);
             seconds_left.setVisible(true);
-            // Simulate successful entrance to the room
+
             simulateRoomEntrance();
         }
     }
 
     private void simulateRoomEntrance() {
-        // Simulate joining the room after a delay (you can replace this with actual
-        // logic)
         SwingUtilities.invokeLater(() -> {
-            // Simulate successful room entrance after 3 seconds
             try {
                 Thread.sleep(3000);
-                // Notify the server about successful entrance
                 notifyServerAboutEntrance();
             } catch (InterruptedException ex) {
                 ex.printStackTrace();
@@ -152,7 +138,6 @@ public class Initt implements ActionListener {
     }
 
     private void notifyServerAboutEntrance() {
-        // You should replace "localhost" and 12345 with your server's address and port
         String serverAddress = "localhost";
         int serverPort = 12345;
 
@@ -160,59 +145,75 @@ public class Initt implements ActionListener {
             Socket socket = new Socket(serverAddress, serverPort);
             DataOutputStream serverOutput = new DataOutputStream(socket.getOutputStream());
 
-            // Send a message to the server indicating successful entrance
-            serverOutput.writeUTF("Successfully entered the match room!");
+            String role = (clickedButton == play) ? "player" : "spectator";
+            serverOutput.writeUTF(role);
 
-            // Once successfully entered the room, start the countdown
             waitingPanel.setVisible(true);
             waitingRoomPanel.setVisible(false);
-
-            socket.close(); // Close the socket once the connection is successful
+             new Thread(() -> {
+            try {
+                DataInputStream serverInput = new DataInputStream(socket.getInputStream());
+                while (true) {
+                    String message = serverInput.readUTF();
+                    // Check if the received message is "start_game"
+                    if ("start_game".equals(message)) {
+                        handleStartGameSignal();
+                    }
+                    // Handle other messages as needed
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }).start();
 
         } catch (ConnectException ce) {
-            // Handle the case when the connection is not successful
             handleUnsuccessfulConnection();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
+    private void handleStartGameSignal() {
+        // Handle the "start_game" signal, for example, by starting the game
+        System.out.println("Received start_game signal. Starting the game!");
+        // Add your logic to start the game here
+    }
 
     private void handleUnsuccessfulConnection() {
-        // Code to handle unsuccessful connection
-        // For example, display an error message to the user
-        JOptionPane.showMessageDialog(frame, "Failed to connect to the server. Please try again later.", "Connection Error", JOptionPane.ERROR_MESSAGE);
-    
-        // Use SwingWorker for background task with a shorter delay
+        JOptionPane.showMessageDialog(frame, "Failed to connect to the server. Please try again later.",
+                "Connection Error", JOptionPane.ERROR_MESSAGE);
+
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
-                // Sleep for 2000 ms (2 seconds)
-                Thread.sleep(2000);
+                waitingPanel.setVisible(false);
+                Thread.sleep(3000);
                 return null;
             }
-    
+
             @Override
             protected void done() {
-                // This code will be executed on the EDT after the sleep
-                waitingPanel.setVisible(false);
                 play.setEnabled(true);
                 spectate.setEnabled(true);
             }
         };
-    
-        worker.execute(); // Start the SwingWorker
+
+        worker.execute();
     }
-       private void handleTimerTick() {
+
+    private void handleTimerTick() {
         seconds_left.setText(String.valueOf(seconds));
 
         if (seconds <= 0) {
-            timer.stop(); // Stop the timer when the countdown reaches 0
-            play.setEnabled(true); // Enable the 'Play' button
-            spectate.setEnabled(true); // Enable the 'Spectate' button
+            timer.stop();
+            play.setEnabled(true);
+            spectate.setEnabled(true);
             waitingPanel.setVisible(false);
-            waitingRoomPanel.setVisible(false); // Hide the new waiting room panel
+            waitingRoomPanel.setVisible(false);
             seconds_left.setVisible(false);
         }
     }
 
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new Initt());
+    }
 }
